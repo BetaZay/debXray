@@ -1,15 +1,27 @@
-cmake_minimum_required(VERSION 3.10)
-project(debXray)
+cmake_minimum_required(VERSION 3.18)
+project(debXray LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++")
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 
-# Include SDL2 and SDL2_ttf
-find_package(SDL2 REQUIRED)
-find_package(SDL2_ttf REQUIRED)
+# Only statically link what we control (SDL2, SDL2_ttf)
+set(SDL2_USE_STATIC_LIBS ON)
+set(SDL2TTF_USE_STATIC_LIBS ON)
+set(OpenCV_STATIC OFF)  # we use dynamic OpenCV libs
+
+# Prevent CMake from trying to use .so for SDL2
+set(BUILD_SHARED_LIBS OFF)
+set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+
+# Find packages
+find_package(SDL2 REQUIRED CONFIG)
+find_package(SDL2_ttf REQUIRED CONFIG)
 find_package(OpenCV REQUIRED)
 
-# ImGui sources
+# SDL2 and TTF will be linked statically
+# OpenCV will be linked dynamically
+
+# ImGui
 set(IMGUI_DIR imgui)
 set(IMGUI_BACKENDS ${IMGUI_DIR}/backends)
 
@@ -22,15 +34,7 @@ set(IMGUI_SRC
     ${IMGUI_BACKENDS}/imgui_impl_sdlrenderer2.cpp
 )
 
-include_directories(
-    ${OpenCV_INCLUDE_DIRS}
-    ${SDL2_INCLUDE_DIRS}
-    ${SDL2_TTF_INCLUDE_DIRS}
-    ${IMGUI_DIR}
-    ${IMGUI_BACKENDS}
-    include
-)
-
+# Main binary
 add_executable(debXray
     ${IMGUI_SRC}
     src/main.cpp
@@ -38,18 +42,45 @@ add_executable(debXray
     src/DependencyManager.cpp
     src/Renderer.cpp
     src/Log.cpp
-    src/WebcamFeed.cpp 
+    src/WebcamFeed.cpp
 )
 
-add_custom_command(TARGET debXray POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:debXray>/libs"
-    COMMAND ldd $<TARGET_FILE:debXray> | awk '/=> \// {print $3}' |
-            xargs -I '{}' cp '{}' "$<TARGET_FILE_DIR:debXray>/libs"
-    COMMENT "Bundling shared libraries..."
+target_include_directories(debXray PRIVATE
+    ${IMGUI_DIR}
+    ${IMGUI_BACKENDS}
+    include
 )
 
-target_link_libraries(debXray
+# SDL static only
+target_link_libraries(debXray PRIVATE
+    -Wl,-Bstatic
+    SDL2::SDL2-static
+    SDL2_ttf::SDL2_ttf-static
+    -Wl,-Bdynamic
     ${OpenCV_LIBS}
-    ${SDL2_LIBRARIES}
-    ${SDL2_TTF_LIBRARIES}
 )
+
+# Output
+set_target_properties(debXray PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+# -----------------------------------------
+# Packaging (DEB) using CPack
+# -----------------------------------------
+include(InstallRequiredSystemLibraries)
+
+set(CPACK_PACKAGE_NAME "debXray")
+set(CPACK_PACKAGE_VENDOR "Isaiah Clark")
+set(CPACK_PACKAGE_CONTACT "support@yourdomain.com")
+set(CPACK_PACKAGE_VERSION "1.0.0")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "System diagnostics and hardware inspection tool")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://yourdomain.com/debxray")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Isaiah Clark")
+set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
+set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+
+# where to install the binary
+install(TARGETS debXray RUNTIME DESTINATION bin)
+
+include(CPack)

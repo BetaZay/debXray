@@ -1,24 +1,20 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-APP_NAME="debXray"
-BUILD_DIR="build"
-OUTPUT_DIR="./bin"
+APP=debXray
+BUILD=build
 
-echo "[*] Cleaning previous build..."
-rm -rf "$BUILD_DIR" "$OUTPUT_DIR"
-mkdir -p "$BUILD_DIR" "$OUTPUT_DIR"
+echo "[*] configuring (Release, fully static)…"
+cmake -S . -B "$BUILD" -DCMAKE_BUILD_TYPE=Release
 
-echo "[*] Configuring CMake..."
-cmake -B "$BUILD_DIR" -S . -DCMAKE_BUILD_TYPE=Release
+echo "[*] compiling…"
+cmake --build "$BUILD" --target $APP --parallel "$(nproc)"
 
-echo "[*] Building $APP_NAME..."
-cmake --build "$BUILD_DIR" --target "$APP_NAME" -- -j$(nproc)
-
-echo "[*] Stripping binary..."
-strip "$BUILD_DIR/$APP_NAME" || echo "[!] strip failed, skipping"
-
-echo "[*] Copying to $OUTPUT_DIR/"
-cp "$BUILD_DIR/$APP_NAME" "$OUTPUT_DIR/"
-
-echo "[✓] Done. Binary located at $OUTPUT_DIR/$APP_NAME"
+echo "[*] verifying the binary really is self-contained…"
+if ldd "$BUILD/bin/$APP" 2>&1 | grep -q "not a dynamic executable"; then
+    echo "[✓] $APP is fully static."
+else
+    echo "[!] Found dynamic dependencies:"
+    ldd "$BUILD/bin/$APP"
+    exit 1
+fi
