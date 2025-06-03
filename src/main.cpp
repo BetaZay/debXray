@@ -20,66 +20,61 @@
 using json = nlohmann::json;
 static std::unordered_set<SDL_Scancode> pressedScancodes;
 
-json toJson(const SystemInfo& info) {
+json toJson(const SystemInfo &info)
+{
     return {
-        { "host_model",       info.model },
-        { "serial",           info.serial },
-        { "resolution",       info.resolution },
+        {"host_model", info.model},
+        {"serial", info.serial},
+        {"resolution", info.resolution},
 
         // CPU Info
-        { "processor_brand",  info.cpuBrand },
-        { "cpu_model",        info.cpuModel },
-        { "cpu_speed",        info.cpuSpeed },
-        { "physical_cpus",    info.physicalCPUs },
+        {"processor_brand", info.cpuBrand},
+        {"cpu_model", info.cpuModel},
+        {"cpu_speed", info.cpuSpeed},
+        {"physical_cpus", info.physicalCPUs},
 
         // GPU
-        { "gpu",              info.gpu },
+        {"gpu", info.gpu},
 
         // Memory
-        { "memory_size",      info.ram },
-        { "memory_type",      info.memoryType },
+        {"memory_size", info.ram},
+        {"memory_type", info.memoryType},
 
         // Battery condition as object with id
-        { "battery_condition", {
-            { "id",
-                info.battery == "Excellent" ? 1 :
-                info.battery == "Good"      ? 2 :
-                info.battery == "Poor"      ? 3 :
-                info.battery == "None"      ? 4 : 0
-            },
-            { "name", info.battery }
-        }},
+        {"battery_condition", {{"id", info.battery == "Excellent" ? 1 : info.battery == "Good" ? 2
+                                                                    : info.battery == "Poor"   ? 3
+                                                                    : info.battery == "None"   ? 4
+                                                                                               : 0},
+                               {"name", info.battery}}},
 
         // PCI devices and storage buses
-        { "pci_devices",      info.pciDevices },
-        { "storage_types",    info.storageTypes }
-    };
+        {"pci_devices", info.pciDevices},
+        {"storage_types", info.storageTypes}};
 }
 
 void showBlockingWarning(const char *title, const char *message)
 {
     SDL_Window *win = SDL_CreateWindow(
         title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        600, 300, SDL_WINDOW_SHOWN
-    );
+        600, 300, SDL_WINDOW_SHOWN);
     SDL_Renderer *ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
     SDL_SetRenderDrawColor(ren, 30, 30, 30, 255);
 
     TTF_Init();
     TTF_Font *font = TTF_OpenFont(
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18
-    );
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18);
     SDL_Color textColor = {255, 255, 255, 255};
 
     SDL_Surface *surface = TTF_RenderText_Blended_Wrapped(
-        font, message, textColor, 580
-    );
+        font, message, textColor, 580);
     SDL_Texture *texture = SDL_CreateTextureFromSurface(ren, surface);
 
     SDL_Event e;
     bool quit = false;
-    while (!quit) {
-        while (SDL_PollEvent(&e)) {
+    while (!quit)
+    {
+        while (SDL_PollEvent(&e))
+        {
             if (e.type == SDL_QUIT ||
                 (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_RETURN))
             {
@@ -102,19 +97,19 @@ void showBlockingWarning(const char *title, const char *message)
     SDL_DestroyWindow(win);
 }
 
-bool uploadSpecs(const json& payload)
+bool uploadSpecs(const json &payload)
 {
     constexpr char URL[] = "https://cfk-sds.com/api/techline-upload";
     constexpr char KEY[] = "secureErase04!";
 
-    CURL* c = curl_easy_init();
-    if (!c) return false;
+    CURL *c = curl_easy_init();
+    if (!c)
+        return false;
 
-    struct curl_slist* hdrs = nullptr;
+    struct curl_slist *hdrs = nullptr;
     hdrs = curl_slist_append(hdrs, "Content-Type: application/json");
     hdrs = curl_slist_append(
-        hdrs, ("X-API-KEY: " + std::string(KEY)).c_str()
-    );
+        hdrs, ("X-API-KEY: " + std::string(KEY)).c_str());
 
     curl_easy_setopt(c, CURLOPT_URL, URL);
     curl_easy_setopt(c, CURLOPT_HTTPHEADER, hdrs);
@@ -122,27 +117,26 @@ bool uploadSpecs(const json& payload)
     curl_easy_setopt(c, CURLOPT_POSTFIELDS, payloadStr.c_str());
 
     std::string resp;
-    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION,
-        +[](char* ptr, size_t sz, size_t nm, void* userdata) -> size_t {
+    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, +[](char *ptr, size_t sz, size_t nm, void *userdata) -> size_t
+                     {
             auto* s = static_cast<std::string*>(userdata);
             s->append(ptr, sz * nm);
-            return sz * nm;
-        }
-    );
+            return sz * nm; });
     curl_easy_setopt(c, CURLOPT_WRITEDATA, &resp);
 
     CURLcode rc = curl_easy_perform(c);
     curl_slist_free_all(hdrs);
     curl_easy_cleanup(c);
 
-    if (rc != CURLE_OK) {
+    if (rc != CURLE_OK)
+    {
         logMessage("Upload failed: " + std::string(curl_easy_strerror(rc)));
         return false;
     }
 
     // server returns {"status":"success|error","message":"…"}
     json r = json::parse(resp, nullptr, false);
-    std::string status  = r.value("status",  "error");
+    std::string status = r.value("status", "error");
     std::string message = r.value("message", "no message");
     logMessage("[upload] " + status + ": " + message);
 
@@ -156,7 +150,8 @@ int main(int argc, char *argv[])
     std::string modalTitle;
     std::string modalMessage;
 
-    for (int i = 1; i < argc; ++i) {
+    for (int i = 1; i < argc; ++i)
+    {
         if (std::string(argv[i]) == "--windowed")
             windowed = true;
     }
@@ -169,7 +164,8 @@ int main(int argc, char *argv[])
     else
         logMessage("[-] No network connection.");
 
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+    if (SDL_Init(SDL_INIT_VIDEO) != 0)
+    {
         logMessage("SDL_Init failed: " + std::string(SDL_GetError()));
         return 1;
     }
@@ -188,16 +184,9 @@ int main(int argc, char *argv[])
     WebcamFeed webcam(renderer);
     SystemInfo info = getSystemInfo();
 
-    // Block if no drives at all → upload specs
-    if (info.detectedDrives.empty()) {
-        logMessage("[*] No drives found.");
-        modalTitle = "No Drives Detected";
-        modalMessage =
-            "No drives were found on this system.\n\nPress Enter to upload system specs.";
-        showModal = true;
-    }
-    // Else if any non-USB drive detected (and not Apple/Surface) → block
-    else if (info.hasNonUsbDrives && !isAppleOrSurface(info.model)) {
+    // if any non-USB drive detected (and not Apple/Surface) → block
+    if (info.hasNonUsbDrives && !isAppleOrSurface(info.model))
+    {
         logMessage("[-] Internal drive(s) detected.");
         modalTitle = "Non-USB Drive Detected";
         modalMessage =
@@ -233,8 +222,7 @@ int main(int argc, char *argv[])
             SDL_SCANCODE_LEFTBRACKET, SDL_SCANCODE_RIGHTBRACKET,
             SDL_SCANCODE_BACKSLASH, SDL_SCANCODE_SEMICOLON,
             SDL_SCANCODE_APOSTROPHE, SDL_SCANCODE_COMMA,
-            SDL_SCANCODE_PERIOD, SDL_SCANCODE_SLASH
-        };
+            SDL_SCANCODE_PERIOD, SDL_SCANCODE_SLASH};
         for (SDL_Scancode sc : extras)
             if (keys[sc])
                 pressedScancodes.insert(sc);
@@ -249,26 +237,31 @@ int main(int argc, char *argv[])
         ImGui::Begin(
             "debXray Main", nullptr,
             ImGuiWindowFlags_NoDecoration |
-            ImGuiWindowFlags_NoMove |
-            ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoCollapse |
-            ImGuiWindowFlags_NoTitleBar |
-            ImGuiWindowFlags_MenuBar
-        );
-
+                ImGuiWindowFlags_NoMove |
+                ImGuiWindowFlags_NoResize |
+                ImGuiWindowFlags_NoCollapse |
+                ImGuiWindowFlags_NoTitleBar |
+                ImGuiWindowFlags_MenuBar);
 
         // ── Menu Bar ──
-        if (ImGui::BeginMenuBar()) {
-            if (ImGui::BeginMenu("System")) {
-                if (ImGui::MenuItem("Upload Specs")) {
-                    if (uploadSpecs(toJson(info))) {
+        if (ImGui::BeginMenuBar())
+        {
+            if (ImGui::BeginMenu("System"))
+            {
+                if (ImGui::MenuItem("Upload Specs"))
+                {
+                    if (uploadSpecs(toJson(info)))
+                    {
                         logMessage("[+] Specs uploaded manually.");
-                    } else {
+                    }
+                    else
+                    {
                         showBlockingWarning("Upload Failed", "Specs upload failed — please try again or contact support.");
                     }
                 }
 
-                if (ImGui::MenuItem("Shutdown")) {
+                if (ImGui::MenuItem("Shutdown"))
+                {
                     logMessage("[*] Shutting down via menu...");
                     system("shutdown -h now");
                 }
@@ -279,7 +272,7 @@ int main(int argc, char *argv[])
         }
 
         ImVec2 avail = ImGui::GetContentRegionAvail();
-        float halfWidth  = avail.x * 0.5f;
+        float halfWidth = avail.x * 0.5f;
         float halfHeight = avail.y * 0.5f;
 
         //
@@ -310,7 +303,8 @@ int main(int argc, char *argv[])
         {
             ImGui::Separator();
             ImGui::Text("PCI Devices:");
-            for (const auto &device : info.pciDevices) {
+            for (const auto &device : info.pciDevices)
+            {
                 ImGui::BulletText("%s", device.c_str());
             }
         }
@@ -334,8 +328,7 @@ int main(int argc, char *argv[])
                     d.name.c_str(),
                     d.tran.c_str(),
                     d.type.c_str(),
-                    d.model.c_str()
-                );
+                    d.model.c_str());
             }
         }
 
@@ -349,15 +342,18 @@ int main(int argc, char *argv[])
         ImGui::Text("Webcam Preview");
         webcam.update();
 
-        if (webcam.isFailed()) {
+        if (webcam.isFailed())
+        {
             ImGui::Spacing();
             ImGui::TextColored(
                 ImVec4(0.8f, 0.1f, 0.1f, 1.0f),
-                "No webcam detected."
-            );
-        } else {
+                "No webcam detected.");
+        }
+        else
+        {
             SDL_Texture *tex = webcam.getTexture();
-            if (tex) {
+            if (tex)
+            {
                 ImVec2 size = ImGui::GetContentRegionAvail();
                 ImGui::Image((ImTextureID)tex, size);
             }
@@ -376,10 +372,10 @@ int main(int argc, char *argv[])
         ImGui::Separator();
         ImGui::BeginChild(
             "LogScroll", ImVec2(0, 0), false,
-            ImGuiWindowFlags_AlwaysVerticalScrollbar
-        );
+            ImGuiWindowFlags_AlwaysVerticalScrollbar);
         auto logs = readLogTail(100);
-        for (const auto &line : logs) {
+        for (const auto &line : logs)
+        {
             ImGui::TextUnformatted(line.c_str());
         }
         if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 5.0f)
@@ -413,8 +409,7 @@ int main(int argc, char *argv[])
                 if (pressedScancodes.count(scancodes[i]))
                     ImGui::PushStyleColor(
                         ImGuiCol_Button,
-                        ImVec4(0.2f, 0.6f, 0.2f, 1.0f)
-                    );
+                        ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
                 ImGui::Button(std::string(1, chars[i]).c_str(), size);
                 if (pressedScancodes.count(scancodes[i]))
                     ImGui::PopStyleColor();
@@ -429,27 +424,23 @@ int main(int argc, char *argv[])
         SDL_Scancode row1Sc[] = {
             SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3, SDL_SCANCODE_4,
             SDL_SCANCODE_5, SDL_SCANCODE_6, SDL_SCANCODE_7, SDL_SCANCODE_8,
-            SDL_SCANCODE_9, SDL_SCANCODE_0, SDL_SCANCODE_MINUS, SDL_SCANCODE_EQUALS
-        };
+            SDL_SCANCODE_9, SDL_SCANCODE_0, SDL_SCANCODE_MINUS, SDL_SCANCODE_EQUALS};
         const char *row2 = "QWERTYUIOP[]\\";
         SDL_Scancode row2Sc[] = {
             SDL_SCANCODE_Q, SDL_SCANCODE_W, SDL_SCANCODE_E, SDL_SCANCODE_R,
             SDL_SCANCODE_T, SDL_SCANCODE_Y, SDL_SCANCODE_U, SDL_SCANCODE_I,
             SDL_SCANCODE_O, SDL_SCANCODE_P, SDL_SCANCODE_LEFTBRACKET,
-            SDL_SCANCODE_RIGHTBRACKET, SDL_SCANCODE_BACKSLASH
-        };
+            SDL_SCANCODE_RIGHTBRACKET, SDL_SCANCODE_BACKSLASH};
         const char *row3 = "ASDFGHJKL;'";
         SDL_Scancode row3Sc[] = {
             SDL_SCANCODE_A, SDL_SCANCODE_S, SDL_SCANCODE_D, SDL_SCANCODE_F,
             SDL_SCANCODE_G, SDL_SCANCODE_H, SDL_SCANCODE_J, SDL_SCANCODE_K,
-            SDL_SCANCODE_L, SDL_SCANCODE_SEMICOLON, SDL_SCANCODE_APOSTROPHE
-        };
+            SDL_SCANCODE_L, SDL_SCANCODE_SEMICOLON, SDL_SCANCODE_APOSTROPHE};
         const char *row4 = "ZXCVBNM,./";
         SDL_Scancode row4Sc[] = {
             SDL_SCANCODE_Z, SDL_SCANCODE_X, SDL_SCANCODE_C, SDL_SCANCODE_V,
             SDL_SCANCODE_B, SDL_SCANCODE_N, SDL_SCANCODE_M, SDL_SCANCODE_COMMA,
-            SDL_SCANCODE_PERIOD, SDL_SCANCODE_SLASH
-        };
+            SDL_SCANCODE_PERIOD, SDL_SCANCODE_SLASH};
 
         // Draw rows
         drawRow(row1, row1Sc, IM_ARRAYSIZE(row1Sc));
@@ -466,18 +457,20 @@ int main(int argc, char *argv[])
             allKeysRequired.insert(std::begin(row4Sc), std::end(row4Sc));
         }
         bool allPressed = true;
-        for (SDL_Scancode sc : allKeysRequired) {
-            if (!pressedScancodes.count(sc)) {
+        for (SDL_Scancode sc : allKeysRequired)
+        {
+            if (!pressedScancodes.count(sc))
+            {
                 allPressed = false;
                 break;
             }
         }
-        if (allPressed) {
+        if (allPressed)
+        {
             ImGui::Spacing();
             ImGui::TextColored(
                 ImVec4(0.1f, 0.8f, 0.1f, 1.0f),
-                "All keys have been tested!"
-            );
+                "All keys have been tested!");
         }
 
         ImGui::EndChild();
@@ -487,28 +480,32 @@ int main(int argc, char *argv[])
         //
         // ── Blocking Modal (if needed) ──
         //
-        if (showModal) {
+        if (showModal)
+        {
             // Process events for the modal only
-            while (SDL_PollEvent(&e)) {
+            while (SDL_PollEvent(&e))
+            {
                 ImGui_ImplSDL2_ProcessEvent(&e);
 
-                if (e.type == SDL_QUIT) {
+                if (e.type == SDL_QUIT)
+                {
                     running = false;
                 }
-                else if (e.type == SDL_KEYDOWN &&
-                         e.key.keysym.sym == SDLK_RETURN)
+                else if (e.type == SDL_KEYDOWN)
                 {
                     showModal = false; // Hide modal
                     // If "No Drives" modal, upload specs now:
-                    if (info.detectedDrives.empty()) {
-                        if (uploadSpecs(toJson(info))) {
+                    if (info.detectedDrives.empty())
+                    {
+                        if (uploadSpecs(toJson(info)))
+                        {
                             logMessage("[+] Specs uploaded successfully.");
                         }
-                        else {
+                        else
+                        {
                             showBlockingWarning(
                                 "Upload Failed",
-                                "Specs upload failed — please try again or contact support."
-                            );
+                                "Specs upload failed — please try again or contact support.");
                         }
                     }
                 }
@@ -519,11 +516,10 @@ int main(int argc, char *argv[])
             ImGui::Begin(
                 "BlockingModal", nullptr,
                 ImGuiWindowFlags_NoDecoration |
-                ImGuiWindowFlags_NoMove       |
-                ImGuiWindowFlags_NoResize     |
-                ImGuiWindowFlags_NoCollapse   |
-                ImGuiWindowFlags_NoTitleBar
-            );
+                    ImGuiWindowFlags_NoMove |
+                    ImGuiWindowFlags_NoResize |
+                    ImGuiWindowFlags_NoCollapse |
+                    ImGuiWindowFlags_NoTitleBar);
 
             ImVec2 center = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
             ImGui::SetCursorPos(ImVec2(center.x - 150, center.y - 50));
@@ -531,21 +527,13 @@ int main(int argc, char *argv[])
             ImGui::BeginGroup();
             ImGui::TextColored(
                 ImVec4(1.0f, 0.2f, 0.2f, 1.0f),
-                "%s", modalTitle.c_str()
-            );
+                "%s", modalTitle.c_str());
             ImGui::Spacing();
             ImGui::TextWrapped("%s", modalMessage.c_str());
             ImGui::Spacing();
             ImGui::Text("Press Enter to continue");
             ImGui::EndGroup();
             ImGui::End();
-
-            ImGui::Render();
-            SDL_SetRenderDrawColor(renderer, 30, 30, 30, 255);
-            SDL_RenderClear(renderer);
-            ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
-            SDL_RenderPresent(renderer);
-            continue;
         }
 
         // ── Render Normal UI ──
