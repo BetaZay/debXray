@@ -13,7 +13,16 @@ bool isRoot() {
 }
 
 void installDependencies() {
-    const std::vector<std::string> packages = { "curl", "screenfetch" };
+    const std::vector<std::string> packages = {
+        "curl",
+        "screenfetch",
+        "dmidecode",
+        "upower",
+        "x11-utils",
+        "x11-xserver-utils",
+        "v4l-utils",
+        "pciutils"
+    };
     std::vector<std::string> missing;
     for (const auto& pkg : packages) {
         std::string checkCmd = "dpkg -s " + pkg + " > /dev/null 2>&1";

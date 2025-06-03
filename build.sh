@@ -4,17 +4,24 @@ set -euo pipefail
 APP=debXray
 BUILD=build
 
-echo "[*] configuring (Release, fully static)…"
+echo "[*] Configuring (Release, partially static)…"
 cmake -S . -B "$BUILD" -DCMAKE_BUILD_TYPE=Release
 
-echo "[*] compiling…"
-cmake --build "$BUILD" --target $APP --parallel "$(nproc)"
+echo "[*] Building..."
+cmake --build "$BUILD" --target "$APP" --parallel "$(nproc)"
 
-echo "[*] verifying the binary really is self-contained…"
-if ldd "$BUILD/bin/$APP" 2>&1 | grep -q "not a dynamic executable"; then
-    echo "[✓] $APP is fully static."
+echo "[*] Checking linked dependencies..."
+ldd "$BUILD/bin/$APP" || true
+echo
+
+# Check for unwanted dynamic libs
+echo "[*] Verifying minimal dynamic dependencies..."
+BAD_LIBS=$(ldd "$BUILD/bin/$APP" | grep -v -E 'libopencv|linux-vdso|ld-linux|libc.so|libm.so|libpthread.so|librt.so|libdl.so' || true)
+
+if [[ -z "$BAD_LIBS" ]]; then
+    echo "[✓] Portable build clean (OpenCV allowed)."
 else
-    echo "[!] Found dynamic dependencies:"
-    ldd "$BUILD/bin/$APP"
+    echo "[!] Found unexpected dynamic deps:"
+    echo "$BAD_LIBS"
     exit 1
 fi
