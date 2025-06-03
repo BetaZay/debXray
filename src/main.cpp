@@ -263,7 +263,7 @@ int main(int argc, char *argv[])
                 if (ImGui::MenuItem("Shutdown"))
                 {
                     logMessage("[*] Shutting down via menu...");
-                    system("shutdown -h now");
+                    system("sudo shutdown -h now");
                 }
 
                 ImGui::EndMenu();
