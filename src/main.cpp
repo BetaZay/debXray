@@ -3,6 +3,7 @@
 #include "Renderer.h"
 #include "Log.h"
 #include "WebcamFeed.h"
+#include "json.hpp"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
@@ -12,8 +13,46 @@
 #include <unordered_set>
 #include <string>
 #include <array>
+#include <curl/curl.h>
+using json = nlohmann::json;
 
 static std::unordered_set<SDL_Scancode> pressedScancodes;
+
+json toJson(const SystemInfo& info) {
+    return {
+        { "host_model",       info.model },
+        { "serial",           info.serial },
+        { "resolution",       info.resolution },
+
+        // CPU Info
+        { "processor_brand",  info.cpuBrand },
+        { "cpu_model",        info.cpuModel },
+        { "cpu_speed",        info.cpuSpeed },
+        { "physical_cpus",    info.physicalCPUs },
+
+        // GPU
+        { "gpu",              info.gpu },
+
+        // Memory
+        { "memory_size",      info.ram },
+        { "memory_type",      info.memoryType },
+
+        // Battery condition as object with id
+        { "battery_condition", {
+            { "id",
+                info.battery == "Excellent" ? 1 :
+                info.battery == "Good"      ? 2 :
+                info.battery == "Poor"      ? 3 :
+                info.battery == "None"      ? 4 : 0
+            },
+            { "name", info.battery }
+        }},
+
+        // PCI devices and storage buses
+        { "pci_devices",      info.pciDevices },
+        { "storage_types",    info.storageTypes }
+    };
+}
 
 void showBlockingWarning(const char *title, const char *message)
 {
@@ -53,6 +92,50 @@ void showBlockingWarning(const char *title, const char *message)
 
     SDL_DestroyRenderer(ren);
     SDL_DestroyWindow(win);
+}
+
+bool uploadSpecs(const json& payload)
+{
+    constexpr char URL[]   = "https://cfk-sds.com/api/techline-upload";
+    constexpr char KEY[]   = "secureErase04!";
+
+    CURL* c = curl_easy_init();
+    if (!c) return false;
+
+    struct curl_slist* hdrs = nullptr;
+    hdrs = curl_slist_append(hdrs,"Content-Type: application/json");
+    hdrs = curl_slist_append(hdrs,("X-API-KEY: "+std::string(KEY)).c_str());
+
+    curl_easy_setopt(c, CURLOPT_URL, URL);
+    curl_easy_setopt(c, CURLOPT_HTTPHEADER, hdrs);
+    std::string payloadStr = payload.dump();
+    curl_easy_setopt(c, CURLOPT_POSTFIELDS, payloadStr.c_str());
+
+    std::string resp;        // collect response for status / message
+    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION,
+        +[](char* ptr,size_t sz,size_t nm,void* userdata)->size_t{
+            auto* s = static_cast<std::string*>(userdata);
+            s->append(ptr,sz*nm);
+            return sz*nm;
+        });
+    curl_easy_setopt(c, CURLOPT_WRITEDATA, &resp);
+
+    CURLcode rc = curl_easy_perform(c);
+    curl_slist_free_all(hdrs);
+    curl_easy_cleanup(c);
+
+    if (rc != CURLE_OK) {
+        logMessage("Upload failed: "+std::string(curl_easy_strerror(rc)));
+        return false;
+    }
+
+    // server returns {"status":"success|error","message":"…"}
+    json r = json::parse(resp, nullptr, false);
+    std::string status  = r.value("status",  "error");
+    std::string message = r.value("message", "no message");
+    logMessage("[upload] "+status+": "+message);
+
+    return status == "success";
 }
 
 int main(int argc, char *argv[])
@@ -109,6 +192,18 @@ int main(int argc, char *argv[])
         modalMessage = "This system has internal (non-USB) drives connected.\n\nPlease shut down and remove them.";
         showModal = true;
     }
+
+    // if (info.hasNonUsbDrives) {
+    //     logMessage("[*] No drives found.");
+    //     showBlockingWarning("No Drives Detected", "No drives were found on this system.\nPress Enter to upload system specs.");
+
+    //     if (uploadSpecs(toJson(info))) {
+    //         logMessage("[+] Specs uploaded successfully.");
+    //     } else {
+    //         showBlockingWarning("Upload Failed", "Specs upload failed — please try again or contact support.");
+    //     }
+    // }
+
     SDL_Event e;
     bool running = true;
     while (running)
@@ -165,9 +260,9 @@ int main(int argc, char *argv[])
         ImGui::Text("Form Factor: %s", info.isLaptop ? "Laptop" : "Desktop");
         ImGui::Text("Model: %s", info.model.c_str());
         ImGui::Text("Serial: %s", info.serial.c_str());
-        ImGui::Text("CPU: %s", info.cpu.c_str());
+        ImGui::Text("CPU: %s - %s @ %sGHz", info.cpuBrand.c_str(), info.cpuModel.c_str(), info.cpuSpeed.c_str());
         ImGui::Text("GPU: %s", info.gpu.c_str());
-        ImGui::Text("RAM: %s", info.ram.c_str());
+        ImGui::Text("RAM: %s %s", info.ram.c_str(), info.memoryType.c_str());
         ImGui::Text("Screen: %s", info.resolution.c_str());
         ImGui::SameLine();
         ImGui::Text("(%s)", info.screenSize.c_str());
