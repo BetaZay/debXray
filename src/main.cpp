@@ -488,7 +488,7 @@ int main(int argc, char *argv[])
             ImGui::End();
 
             // After drawing UI (during the same frame)
-            if (ImGui::IsKeyPressed(ImGuiKey_Enter))
+            if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false))
             {
                 showModal = false;
 
