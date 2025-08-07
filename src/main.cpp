@@ -52,51 +52,6 @@ json toJson(const SystemInfo &info)
         {"storage_types", info.storageTypes}};
 }
 
-void showBlockingWarning(const char *title, const char *message)
-{
-    SDL_Window *win = SDL_CreateWindow(
-        title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        600, 300, SDL_WINDOW_SHOWN);
-    SDL_Renderer *ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
-    SDL_SetRenderDrawColor(ren, 30, 30, 30, 255);
-
-    TTF_Init();
-    TTF_Font *font = TTF_OpenFont(
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18);
-    SDL_Color textColor = {255, 255, 255, 255};
-
-    SDL_Surface *surface = TTF_RenderText_Blended_Wrapped(
-        font, message, textColor, 580);
-    SDL_Texture *texture = SDL_CreateTextureFromSurface(ren, surface);
-
-    SDL_Event e;
-    bool quit = false;
-    while (!quit)
-    {
-        while (SDL_PollEvent(&e))
-        {
-            if (e.type == SDL_QUIT ||
-                (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_RETURN))
-            {
-                quit = true;
-            }
-        }
-        SDL_RenderClear(ren);
-        int w, h;
-        SDL_QueryTexture(texture, NULL, NULL, &w, &h);
-        SDL_Rect dst = {10, 100, w, h};
-        SDL_RenderCopy(ren, texture, NULL, &dst);
-        SDL_RenderPresent(ren);
-    }
-
-    SDL_DestroyTexture(texture);
-    SDL_FreeSurface(surface);
-    TTF_CloseFont(font);
-    TTF_Quit();
-    SDL_DestroyRenderer(ren);
-    SDL_DestroyWindow(win);
-}
-
 bool uploadSpecs(const json &payload)
 {
     constexpr char URL[] = "https://cfk-sds.com/api/techline-upload";
@@ -138,7 +93,7 @@ bool uploadSpecs(const json &payload)
     json r = json::parse(resp, nullptr, false);
     std::string status = r.value("status", "error");
     std::string message = r.value("message", "no message");
-    logMessage("[upload] " + status + ": " + message);
+    logMessage("[Upload " + status + "]: " + message);
 
     return status == "success";
 }
@@ -202,10 +157,37 @@ int main(int argc, char *argv[])
         while (SDL_PollEvent(&e))
         {
             ImGui_ImplSDL2_ProcessEvent(&e);
+
             if (e.type == SDL_QUIT ||
                 (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE))
             {
                 running = false;
+            }
+
+            if (e.type == SDL_KEYDOWN)
+            {
+                const bool ctrl = (SDL_GetModState() & KMOD_CTRL);
+
+                switch (e.key.keysym.sym)
+                {
+                case SDLK_u:
+                    if (ctrl)
+                    {
+                        if (uploadSpecs(toJson(info)))
+                            logMessage("[+] Specs uploaded manually.");
+                        else
+                            logMessage("[-] Upload Failed Specs, please try again or contact support.");
+                    }
+                    break;
+
+                case SDLK_q:
+                    if (ctrl)
+                    {
+                        logMessage("[*] Shutting down via keyboard...");
+                        //system("sudo shutdown -h now");
+                    }
+                    break;
+                }
             }
         }
 
@@ -256,14 +238,14 @@ int main(int argc, char *argv[])
                     }
                     else
                     {
-                        showBlockingWarning("Upload Failed", "Specs upload failed — please try again or contact support.");
+                        logMessage("[-] Upload Failed - please try again or contact support.");
                     }
                 }
 
                 if (ImGui::MenuItem("Shutdown"))
                 {
                     logMessage("[*] Shutting down via menu...");
-                    system("sudo shutdown -h now");
+                    //system("sudo shutdown -h now");
                 }
 
                 ImGui::EndMenu();
@@ -482,35 +464,7 @@ int main(int argc, char *argv[])
         //
         if (showModal)
         {
-            // Process events for the modal only
-            while (SDL_PollEvent(&e))
-            {
-                ImGui_ImplSDL2_ProcessEvent(&e);
-
-                if (e.type == SDL_QUIT)
-                {
-                    running = false;
-                }
-                else if (e.type == SDL_KEYDOWN)
-                {
-                    showModal = false; // Hide modal
-                    // If "No Drives" modal, upload specs now:
-                    if (info.detectedDrives.empty())
-                    {
-                        if (uploadSpecs(toJson(info)))
-                        {
-                            logMessage("[+] Specs uploaded successfully.");
-                        }
-                        else
-                        {
-                            showBlockingWarning(
-                                "Upload Failed",
-                                "Specs upload failed — please try again or contact support.");
-                        }
-                    }
-                }
-            }
-
+            // Still inside `if (showModal)`
             ImGui::SetNextWindowPos(ImVec2(0, 0));
             ImGui::SetNextWindowSize(io.DisplaySize);
             ImGui::Begin(
@@ -525,15 +479,27 @@ int main(int argc, char *argv[])
             ImGui::SetCursorPos(ImVec2(center.x - 150, center.y - 50));
 
             ImGui::BeginGroup();
-            ImGui::TextColored(
-                ImVec4(1.0f, 0.2f, 0.2f, 1.0f),
-                "%s", modalTitle.c_str());
+            ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.2f, 1.0f), "%s", modalTitle.c_str());
             ImGui::Spacing();
             ImGui::TextWrapped("%s", modalMessage.c_str());
             ImGui::Spacing();
             ImGui::Text("Press Enter to continue");
             ImGui::EndGroup();
             ImGui::End();
+
+            // After drawing UI (during the same frame)
+            if (ImGui::IsKeyPressed(ImGuiKey_Enter))
+            {
+                showModal = false;
+
+                if (info.detectedDrives.empty())
+                {
+                    if (uploadSpecs(toJson(info)))
+                        logMessage("[+] Specs uploaded successfully.");
+                    else
+                        logMessage("[+] Upload Failed — please try again or contact support.");
+                }
+            }
         }
 
         // ── Render Normal UI ──
