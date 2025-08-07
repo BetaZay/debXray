@@ -184,7 +184,7 @@ int main(int argc, char *argv[])
                     if (ctrl)
                     {
                         logMessage("[*] Shutting down via keyboard...");
-                        //system("sudo shutdown -h now");
+                        system("sudo shutdown -h now");
                     }
                     break;
                 }
